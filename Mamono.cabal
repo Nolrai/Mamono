@@ -49,10 +49,11 @@ extra-source-files: CHANGELOG.md
 
 library
     -- Modules exported by the library.
-    exposed-modules:  MyLib
+    exposed-modules:  Luhn
+                   ,  Luhn.Internal
 
     -- Modules included in this library but not exported.
-    -- other-modules:
+    -- other-modules:  
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -98,7 +99,13 @@ test-suite Mamono-test
     hs-source-dirs:   test
 
     -- The entrypoint to the test suite.
-    main-is:          MyLibTest.hs
+    main-is:          Spec.hs
+
+    other-modules:    LuhnSpec
+                    , Luhn.InternalSpec
 
     -- Test dependencies.
     build-depends:    base ^>=4.14.3.0
+                    , hspec ^>=2.10.6
+                    , QuickCheck ^>=2.14.2
+                    , Mamono
