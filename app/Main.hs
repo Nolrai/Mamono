@@ -1,15 +1,5 @@
 module Main where
 
-import System.Environment (getArgs)
-import Text.Read ( readEither )
+import Graphics.Gloss
 
-import Luhn (validate)
-
-main :: IO ()
-main = do
-  [input] <- map readEither <$> getArgs
-  case input of
-    Left err -> error err
-    Right int -> do
-      let result = if validate int then "Valid" else "Invalid"
-      putStrLn $ "running Luhn validation: " <> result
+main = display (InWindow "Nice Window" (200, 200) (10, 10)) white (Circle 80)

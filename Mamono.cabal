@@ -49,8 +49,8 @@ extra-source-files: CHANGELOG.md
 
 library
     -- Modules exported by the library.
-    exposed-modules:  Luhn
-                   ,  Luhn.Internal
+    exposed-modules:  Cellular.Torus
+                    , Cellular.Cell
 
     -- Modules included in this library but not exported.
     -- other-modules:  
@@ -60,6 +60,13 @@ library
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.14.3.0
+                    , lens
+                    , array
+                    , comonad
+                    , linear
+                    , vector
+                    , relude
+                    , gloss
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -80,7 +87,8 @@ executable Mamono
     -- Other library packages from which modules are imported.
     build-depends:
         base ^>=4.14.3.0,
-        Mamono
+        Mamono,
+        gloss
 
     -- Directories containing source files.
     hs-source-dirs:   app
@@ -101,11 +109,14 @@ test-suite Mamono-test
     -- The entrypoint to the test suite.
     main-is:          Spec.hs
 
-    other-modules:    LuhnSpec
-                    , Luhn.InternalSpec
+    other-modules:    Cellular.TorusSpec
 
     -- Test dependencies.
     build-depends:    base ^>=4.14.3.0
                     , hspec ^>=2.10.6
                     , QuickCheck ^>=2.14.2
                     , Mamono
+                    , relude
+                    , lens
+                    , vector
+                    , gloss
