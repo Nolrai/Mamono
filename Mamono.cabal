@@ -49,9 +49,7 @@ extra-source-files: CHANGELOG.md
 
 library
     -- Modules exported by the library.
-    exposed-modules:  Cellular.Torus
-                    , Cellular.Cell
-
+    exposed-modules:  Circuit
     -- Modules included in this library but not exported.
     -- other-modules:  
 
@@ -67,6 +65,7 @@ library
                     , vector
                     , relude
                     , gloss
+                    , bitwise
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -109,7 +108,7 @@ test-suite Mamono-test
     -- The entrypoint to the test suite.
     main-is:          Spec.hs
 
-    other-modules:    Cellular.TorusSpec
+    other-modules:    CircuitSpec
 
     -- Test dependencies.
     build-depends:    base ^>=4.14.3.0
@@ -120,3 +119,4 @@ test-suite Mamono-test
                     , lens
                     , vector
                     , gloss
+                    , bitwise
