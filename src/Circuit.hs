@@ -2,7 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Circuit (Cmd(..), ToggleCmd(..), RotateCmd(..), SwapCmd(..), runCmd, runCmdReverse) where
+module Circuit (Circuit, Cmd(..), ToggleCmd(..), RotateCmd(..), SwapCmd(..), runCmd, runCmdReverse) where
 
 import Data.Array.BitArray             -- Immutable bit arrays.
 import Data.Array.BitArray.ByteString  -- (De)serialization.
