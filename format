@@ -1,0 +1,1 @@
+ormolu -i **/*.hs
