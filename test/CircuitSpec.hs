@@ -3,40 +3,23 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use head" #-}
 
 module CircuitSpec where
 
 import Circuit
 import Control.Exception (evaluate)
+import Control.Monad (forM_, replicateM)
 import Data.Array.BitArray
 import Data.Functor
 import Data.List qualified as List
+import Data.Word
 import GHC.Base
 import GHC.Num ((-))
 import Test.Hspec
 import Test.QuickCheck
-
-fromList :: [Bool] -> BitArray Int
-fromList l = listArray (0, List.length l - 1) l
-
-instance Arbitrary ToggleCmd where
-  arbitrary = ToggleCmd <$> arbitrary <*> arbitrary
-
-instance Arbitrary RotateCmd where
-  arbitrary = RotateCmd <$> arbitrary
-
-instance Arbitrary SwapCmd where
-  arbitrary = SwapCmd <$> arbitrary <*> arbitrary
-
-instance Arbitrary Cmd where
-  arbitrary = oneof [Toggle <$> arbitrary, Rotate <$> arbitrary, Swap <$> arbitrary]
-
-instance Arbitrary (BitArray Int) where
-  arbitrary = fromList <$> arbitrary
-  shrink = fmap fromList . shrink . elems
-
-instance Eq (BitArray Int) where
-  (==) a b = bounds a == bounds b && and (zipWith (==) a b)
 
 spec :: Spec
 spec = do
@@ -51,7 +34,7 @@ spec = do
     it "can be rotated" $ do
       let state = fromList $ (== 1) <$> [1, 0, 0, 0] <> [0, 0, 0, 1]
       let cmd = Rotate (RotateCmd 1)
-      let expected = fromList $ (== 1) <$> [1, 1, 0, 0] <> [0, 0, 0, 0]
+      let expected = fromList $ (== 1) <$> [0, 0, 0, 0] <> [0, 0, 1, 1]
       runCmd cmd state `shouldBe` expected
     it "can be swapped" $ do
       let state = fromList $ (== 1) <$> [1, 0, 0, 0] <> [0, 0, 0, 0]
@@ -67,7 +50,7 @@ spec = do
       let expected = fromList $ (== 1) <$> [1, 0, 0, 0] <> [0, 0, 0, 0]
       runCmdReverse cmd state `shouldBe` expected
     it "can be rotated" $ do
-      let state = fromList $ (== 1) <$> [1, 1, 0, 0] <> [0, 0, 0, 0]
+      let state = fromList $ (== 1) <$> [0, 0, 0, 0] <> [0, 0, 1, 1]
       let cmd = Rotate (RotateCmd 1)
       let expected = fromList $ (== 1) <$> [1, 0, 0, 0] <> [0, 0, 0, 1]
       runCmdReverse cmd state `shouldBe` expected
@@ -77,14 +60,40 @@ spec = do
       let expected = fromList $ (== 1) <$> [1, 0, 0, 0] <> [0, 0, 0, 0]
       runCmdReverse cmd state `shouldBe` expected
     it "is the reverse of runCmd" $
-      property $ \(cmd :: Cmd) (state :: BitArray Int) ->
-        isValid cmd ==>
-          runCmdReverse cmd (runCmd cmd state) `shouldBe` state
+      property $ \(cmd :: Cmd) (state :: BitArray Word8) ->
+        runCmdReverse cmd (runCmd cmd state) `shouldBe` state
   describe "runCircuit" $ do
     it "is id on the empty circuit" $
-      property $ \(state :: BitArray Int) ->
-        runCircuit [] state `shouldBe` state
+      property $ \(state :: BitArray Word8) ->
+        runCircuit mempty state `shouldBe` state
     it "is the reverse of runCircuitReverse" $
-      property $ \(circuit :: Circuit) (state :: BitArray Int) ->
-        List.all isValid circuit ==>
-          runCircuit circuit (runCircuitReverse circuit state) `shouldBe` state
+      property $ \(circuit :: Circuit) (state :: BitArray Word8) ->
+        runCircuit circuit (runCircuitReverse circuit state) `shouldBe` state
+  describe "bitArray" $ do
+    it "can be constructed from a word8 and converted back" $
+      property $ \(x :: Word8) ->
+        toWord8 (fromWord8 x) `shouldBe` x
+  describe "encode/decode" $ do
+    describe "encodeCommand" $ do
+      it "can be decoded" $
+        exampleCmd `forM_` canBeDecoded
+      it "can be decoded" $
+        property canBeDecoded
+    describe "encodeCircuit" $ do
+      it "can be decoded" $
+        property canBeDecoded'
+
+-- the other way around is not true, because the encoding is not unique, multiple codes will get decoded to same circuit/cmd
+
+canBeDecoded :: Cmd -> Expectation
+canBeDecoded cmd = decodeCommand (encodeCommand cmd) `shouldBe` cmd
+
+canBeDecoded' :: Circuit -> Expectation
+canBeDecoded' circuit = decodeCircuit (encodeCircuit circuit) `shouldBe` circuit
+
+exampleCmd :: [Cmd]
+exampleCmd =
+  [ Swap (SwapCmd 0 1),
+    Swap (SwapCmd 7 0),
+    Rotate (RotateCmd 1)
+  ]
