@@ -63,6 +63,9 @@ instance Ord (BitArray Word8) where
 fromList :: [Bool] -> BitArray Word8
 fromList l = listArray (0, fromIntegral (List.length l - 1)) l
 
+toList :: BitArray Word8 -> [Bool]
+toList = elems
+
 data ToggleCmd = ToggleCmd {control :: BitArray Word8, target :: BitArray Word8}
   deriving (Show, Eq, Ord)
 
@@ -173,6 +176,7 @@ decodeCommand l =
     0 -> Toggle (ToggleCmd (fromList control) (fromList target))
     1 -> Rotate (RotateCmd (decodeGray (0, 7) index0))
     2 -> Swap (SwapCmd (decodeGray (0, 7) index0) (decodeGray (0, 7) index1))
+    _ -> error "invalid command"
   where
     cmd :: Word8
     cmd = decodeGray (0, 3) cmdCode

@@ -70,6 +70,7 @@ library
                     , MonadRandom
                     , QuickCheck
                     , moo
+                    , text
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -91,13 +92,14 @@ executable Mamono
     build-depends:
         base ^>=4.14.3.0,
         Mamono,
-        bytestring,
+        bytestring ^>= 0.11.4.0,
         megaparsec,
         optparse-applicative,
         vector,
         moo,
         base64-bytestring,
         bitwise,
+        text,
 
     -- Directories containing source files.
     hs-source-dirs:   app
