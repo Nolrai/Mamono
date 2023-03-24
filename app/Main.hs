@@ -13,7 +13,7 @@ import Circuit
     decodeCircuit,
     encodeCircuit,
     fromList,
-    toList,
+    toList, noop,
   )
 import Control.Applicative
   ( Applicative (pure, (*>), (<*), (<*>)),
@@ -26,7 +26,6 @@ import Data.Array.BitArray as BitArray
 import Data.Array.BitArray.ByteString (fromByteString, toByteString)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
-import Data.ByteString.Base64 qualified as Base64
 import Data.Char (Char, ord)
 import Data.Either (Either (..))
 import Data.Function (($), (.))
@@ -57,7 +56,7 @@ import Moo.GeneticAlgorithm.Binary
     rankScale,
     rouletteSelect,
     runIO,
-    withPopulationTransform,
+    withPopulationTransform, Population,
   )
 import Moo.GeneticAlgorithm.Run
   ( Cond (Generations),
@@ -76,7 +75,7 @@ import Moo.GeneticAlgorithm.Types
   )
 import Options (Options (..), getOptions)
 import Relude hiding (fromList)
-import Serialization (BSParser, handleParser, parsePopulation)
+import Serialization (Serialize (..), deserialize, TextParser)
 import Test.QuickCheck (Gen, arbitrary, chooseInt, generate, vectorOf)
 import Utils (scoreLines)
 
@@ -104,27 +103,24 @@ getInput = do
     (True, True) -> die "No input file or population size given. Exiting."
     (False, False) -> die "Both input file and population size given. Exiting."
     (True, False) -> do
-      population <- handleParser parsePopulation input
+      population <- readPopulationFile input
       pure (population, timeLimit, output, plainText)
     (False, True) -> do
       population <- generatePopulation startPopulation
       pure (population, timeLimit, output, plainText)
 
-handleParser :: BSParser r -> FilePath -> IO r
-handleParser parser filePath = do
-  input <- BS.readFile filePath
-  case runParser parser filePath input of
-    Left err -> die $ "Error parsing input file: " <> show err
-    Right result -> pure result
+readPopulationFile :: FilePath -> IO [Circuit]
+readPopulationFile filePath = do
+  inputText <- Text.readFile filePath
+  deserialize "failed to read population file:" filePath inputText
 
 generatePopulation :: Int -> IO [Circuit]
 generatePopulation n = do
   randomlyMade <- Monad.replicateM (n - 1) (generate $ Vector.replicateM 100 arbitrary)
-  let noops = List.replicate 100 noop
   pure $ noops : randomlyMade
   where
-    noop :: Circuit
-    noop = Vector.replicate 100 (Swap (SwapCmd 0 0))
+    noops :: Circuit
+    noops = Vector.replicate 100 noop
 
 body :: Vector ByteString -> [Circuit] -> Int -> IO [(Circuit, Double)]
 body plainText population' timeLimit = do
@@ -163,6 +159,6 @@ handleResult "" result = do
 handleResult output result = do
   putStrLn "Ending fitnesses: "
   print (snd <$> result)
-  let bs = unparsePopulation result
-  BS.writeFile output bs
+  let bs = serialize $ List.map fst result
+  Text.writeFile output bs
   putStrLn "Wrote result to file."

@@ -57,10 +57,10 @@ instance Serialize [Circuit] where
   parser :: TextParser [Circuit]
   parser = sepEndBy1 parser newline
 
-deserialize :: Serialize a => Text -> IO a
-deserialize bs =
-  case parse parser "" bs of
-    Left err -> die $ "Failed to parse: " <> errorBundlePretty err
+deserialize :: Serialize a => String -> FilePath -> Text -> IO a
+deserialize onError fileName bs =
+  case parse parser fileName bs of
+    Left err -> die $ onError <> errorBundlePretty err
     Right a -> pure a
 
 type TextParser = Parsec Void Text
