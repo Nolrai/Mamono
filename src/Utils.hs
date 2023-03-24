@@ -3,36 +3,27 @@
 module Utils where
 
 import Circuit
+import Control.Applicative ((<$>))
 import Control.Monad
 import Data.ByteString as ByteString
+import qualified Data.ByteString as Text
+import Data.List as List
 import Data.Set
+import qualified Data.Text.Encoding as Text
 import Data.Vector as V
+import Data.Vector as Vector
 import Data.Word (Word8)
 import GHC.Base
 import GHC.Enum
 import GHC.Num (Num (..))
 import GHC.Real (fromIntegral)
 import Moo.GeneticAlgorithm
+import Relude (Show, show, (/))
 import System.IO (FilePath, IOMode (ReadMode), openFile)
-import Test.QuickCheck
 
-newLine :: Word8
-newLine = 10
-
-readFileToLineVector :: FilePath -> IO (Vector ByteString)
-readFileToLineVector path = do
-  handle <- openFile path ReadMode
-  contents <- hGetContents handle
-  let lineVector = V.fromList $ ByteString.split newLine contents
-  return lineVector
-
--- | Score a circuit against a library of lines
-scoreCircuit :: Vector ByteString -> Circuit -> Gen Int
-scoreCircuit library circuit = do
-  let libraryLength = V.length library
-  ix <- chooseInt (0, libraryLength - 1)
-  let line = library ! ix
-  pure $ scoreLine line circuit
+-- score a circuit against a set of lines
+scoreLines :: Vector ByteString -> Circuit -> Double
+scoreLines lines circuit = fromIntegral (List.sum $ (`scoreLine` circuit) <$> lines) / fromIntegral (Vector.sum $ ByteString.length <$> lines)
 
 -- | Score a circuit against a single line
 scoreLine :: ByteString -> Circuit -> Int
@@ -43,3 +34,6 @@ scoreLine line circuit =
 scoreWord8 :: Word8 -> Circuit -> Int
 scoreWord8 w circuit =
   fromIntegral . toWord8 . runCircuit circuit $ fromWord8 w
+
+showToBS :: Show a => a -> ByteString
+showToBS = Text.encodeUtf8 . show

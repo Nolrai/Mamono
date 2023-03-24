@@ -51,6 +51,7 @@ library
     -- Modules exported by the library.
     exposed-modules:  Circuit
                     , Utils
+                    , Serialization
     -- Modules included in this library but not exported.
     -- other-modules:  
 
@@ -58,7 +59,7 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.14.3.0
+    build-depends:    base >=4.14 && <5
                     , lens
                     , array
                     , comonad
@@ -71,6 +72,8 @@ library
                     , QuickCheck
                     , moo
                     , text
+                    , megaparsec
+                    , base64-bytestring
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -90,16 +93,16 @@ executable Mamono
 
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.14.3.0,
+        base >=4.14 && <5,
         Mamono,
-        bytestring ^>= 0.11.4.0,
-        megaparsec,
+        bytestring,
         optparse-applicative,
         vector,
         moo,
-        base64-bytestring,
         bitwise,
         text,
+        QuickCheck,
+        relude,
 
     -- Directories containing source files.
     hs-source-dirs:   app
@@ -123,11 +126,13 @@ test-suite Mamono-test
     main-is:          Spec.hs
 
     other-modules:    CircuitSpec
+                    , UtilsSpec
+                    , SerializationSpec
 
     -- Test dependencies.
-    build-depends:    base ^>=4.14.3.0
-                    , hspec ^>=2.10.6
-                    , QuickCheck ^>=2.14.2
+    build-depends:    base >=4.14 && <5
+                    , hspec
+                    , QuickCheck
                     , Mamono
                     , relude
                     , lens

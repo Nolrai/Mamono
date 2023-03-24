@@ -58,6 +58,7 @@ data Options = Options
     timeLimit :: Int,
     startPopulation :: Int
   }
+  deriving (Show)
 
 optionParser :: Parser Options
 optionParser = Options <$> outputParser <*> inputParser <*> plainTextParser <*> timeLimitParser <*> startPopulationParser

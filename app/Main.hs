@@ -1,14 +1,25 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Main where
 
 import Circuit
-import Circuit (decodeCircuit, encodeCircuit)
+  ( Circuit,
+    decodeCircuit,
+    encodeCircuit,
+    fromList,
+    toList,
+  )
 import Control.Applicative
-import Control.Arrow (first)
+  ( Applicative (pure, (*>), (<*), (<*>)),
+    (<$>),
+  )
+import Control.Monad ((=<<))
 import Control.Monad qualified as Monad
 import Control.Monad.ST (stToIO)
 import Data.Array.BitArray as BitArray
@@ -16,11 +27,11 @@ import Data.Array.BitArray.ByteString (fromByteString, toByteString)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base64 qualified as Base64
-import Data.Char
+import Data.Char (Char, ord)
+import Data.Either (Either (..))
 import Data.Function (($), (.))
 import Data.Functor (($>))
 import Data.List qualified as List
-import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -28,57 +39,114 @@ import Data.Text.IO qualified as Text
 import Data.Tuple (fst, snd)
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
-import GHC.Base (Bool (..), Double, IO, Int, Ord (..), otherwise, (&&), (||))
-import GHC.Enum (Enum (..), fromEnum, toEnum)
-import GHC.Num (Integer, Num (..))
-import GHC.Real (Fractional (..), Integral (..), Real (..), fromIntegral, toRational)
-import GHC.Show (Show (..))
-import GHC.Word (Word8)
+import GHC.Stats (RTSStats (nonmoving_gc_cpu_ns))
 import Moo.GeneticAlgorithm.Binary
+  ( Cond (Generations),
+    Genome,
+    IOHook (DoEvery, TimeLimit),
+    Objective,
+    ObjectiveFunction (..),
+    ProblemType (Minimizing),
+    Rand,
+    SelectionOp,
+    StepGA,
+    constFrequencyMutate,
+    loopIO,
+    nextSteadyState,
+    onePointCrossover,
+    rankScale,
+    rouletteSelect,
+    runIO,
+    withPopulationTransform,
+  )
 import Moo.GeneticAlgorithm.Run
+  ( Cond (Generations),
+    IOHook (DoEvery, TimeLimit),
+    loopIO,
+    nextSteadyState,
+    runIO,
+  )
 import Moo.GeneticAlgorithm.Statistics (quantiles)
 import Moo.GeneticAlgorithm.Types
+  ( Cond (Generations),
+    Genome,
+    ProblemType (Minimizing),
+    SelectionOp,
+    StepGA,
+  )
 import Options (Options (..), getOptions)
-import System.IO (FilePath, IO, print, putStrLn, readFile, writeFile)
-import System.Exit (die)
-import Text.Megaparsec hiding (getInput)
-import Text.Megaparsec.Byte
-import Text.Megaparsec.Byte.Lexer (decimal)
-import Utils (scoreCircuit)
+import Relude hiding (fromList)
+import Serialization (BSParser, handleParser, parsePopulation)
+import Test.QuickCheck (Gen, arbitrary, chooseInt, generate, vectorOf)
+import Utils (scoreLines)
 
 main :: IO ()
 main = do
-  (population, timeLimit, output) <- getInput
-  result <- body plainText population timeLimit
+  Text.putStrLn "Welcome to the Circuit Optimizer!"
+  print =<< getArgs
+  (population, timeLimit, output, plainText) <- getInput
+  result <- body (toChunks 100 plainText) population timeLimit
   handleResult output result
 
+toChunks :: Int -> ByteString -> Vector ByteString
+toChunks n = Vector.unfoldr step
+  where
+    step bs
+      | BS.null bs = Nothing
+      | otherwise = Just (BS.splitAt n bs)
+
+getInput :: IO ([Circuit], Int, FilePath, ByteString)
 getInput = do
+  print =<< getOptions
   Options {..} <- getOptions
-  plainText <- split (ord '\n') BS.readFile plainTextFile
+  plainText <- BS.readFile plainText
   case (startPopulation == 0, input == "") of
     (True, True) -> die "No input file or population size given. Exiting."
     (False, False) -> die "Both input file and population size given. Exiting."
     (True, False) -> do
-      population <- runParser parsePopulation input =<< BS.readFile input
+      population <- handleParser parsePopulation input
       pure (population, timeLimit, output, plainText)
     (False, True) -> do
       population <- generatePopulation startPopulation
       pure (population, timeLimit, output, plainText)
 
+handleParser :: BSParser r -> FilePath -> IO r
+handleParser parser filePath = do
+  input <- BS.readFile filePath
+  case runParser parser filePath input of
+    Left err -> die $ "Error parsing input file: " <> show err
+    Right result -> pure result
+
 generatePopulation :: Int -> IO [Circuit]
-generatePopulation n = stToIO $ replicateM n (randomCircuit 100)
+generatePopulation n = do
+  randomlyMade <- Monad.replicateM (n - 1) (generate $ Vector.replicateM 100 arbitrary)
+  let noops = List.replicate 100 noop
+  pure $ noops : randomlyMade
+  where
+    noop :: Circuit
+    noop = Vector.replicate 100 (Swap (SwapCmd 0 0))
 
 body :: Vector ByteString -> [Circuit] -> Int -> IO [(Circuit, Double)]
-body plainText population timeLimit =
-  first decodeCircuit <$> runIO (pure $ encodeCircuit <$> population) ga
+body plainText population' timeLimit = do
+  proctor <- makeProctor 100 plainText
+  putStr "Starting fitnesses: "
+  printStats (-1) $ zip population (proctor population)
+  let (stepGA :: StepGA Rand Bool) = nextSteadyState (List.length population `div` 2) Minimizing proctor selectionOp (onePointCrossover 0.5) (constFrequencyMutate 1)
+  let ga = loopIO [TimeLimit (fromIntegral timeLimit), DoEvery 5 printStats] cond stepGA
+  List.map (first decodeCircuit) <$> runIO (pure population) ga
   where
-    ga = loopIO [TimeLimit (fromIntegral timeLimit), DoEvery 5 printStats] cond stepGA
-    stepGA :: StepGA Rand Bool
-    stepGA = nextSteadyState (List.length population `div` 2) Minimizing (scoreCircuit plainText) selectionOp (onePointCrossover 0.5) (constFrequencyMutate 1)
     selectionOp :: SelectionOp a
     selectionOp = withPopulationTransform (rankScale Minimizing) (rouletteSelect 2)
     cond :: Cond a
     cond = Generations 10000
+    population = encodeCircuit <$> population'
+
+-- choose n lines from the input file and score the circuit against them
+makeProctor :: Int -> Vector ByteString -> IO ([Genome Bool] -> [Objective])
+makeProctor numLines v = do
+  indexes <- generate $ Vector.replicateM numLines (chooseInt (0, Vector.length v - 1))
+  let lines = Vector.map (v Vector.!) indexes
+  pure (scoreLines lines . decodeCircuit <$>)
 
 showT :: Show a => a -> Text.Text
 showT = Text.pack . show
@@ -88,7 +156,7 @@ printStats generationNumber population = do
   let fitnessQuantiles = quantiles (snd <$> population) [1.0, 0.9, 0.75, 0.5, 0.25, 0.1, 0.0]
   Text.putStrLn $ "Generation: " <> showT generationNumber <> " Quantiles: " <> showT fitnessQuantiles
 
-handleResult :: FilePath -> [(Circuit, Integer)] -> IO ()
+handleResult :: FilePath -> [(Circuit, Double)] -> IO ()
 handleResult "" result = do
   putStrLn "Ending fitnesses: "
   print (snd <$> result)
@@ -98,44 +166,3 @@ handleResult output result = do
   let bs = unparsePopulation result
   BS.writeFile output bs
   putStrLn "Wrote result to file."
-
-showToBS :: Show a => a -> ByteString
-showToBS = Text.encodeUtf8 . Text.pack . show
-
-unparsePopulation :: [(Circuit, Integer)] -> BS.ByteString
-unparsePopulation population =
-  showToBS (List.length population)
-    <> charBS '\n'
-    <> BS.intercalate (charBS '\n') (List.map (unparseCircuit . fst) population)
-
-charBS :: Char -> BS.ByteString
-charBS = BS.singleton . fromIntegral . fromEnum
-
-unparseCircuit :: Circuit -> BS.ByteString
-unparseCircuit circuit = header <> body
-  where
-    body = bs
-    -- we need both of these lengths because of padding issues and base64 encoding
-    header = showToBS (BS.length bs) <> charBS ' ' <> showToBS (bounds bitArray) <> charBS ' '
-    bs = Base64.encode . toByteString $ bitArray
-    bitArray = fromList . encodeCircuit $ circuit
-
-type BSParser = Parsec () BS.ByteString
-
-parsePopulation :: BSParser [Circuit]
-parsePopulation = do
-  n <- decimal
-  Monad.replicateM n parseCircuit
-
-char_ :: Char -> BSParser ()
-char_ = (char . fromIntegral . fromEnum) $> ()
-
-parseCircuit :: BSParser Circuit
-parseCircuit = do
-  byteLength <- decimal
-  bitRange <- (,) <$> char_ '(' *> decimal <*> (char_ ',' *> decimal <* char_ ')')
-  base64 <- takeP (Just "circuit") byteLength
-  let byteString = Base64.decodeLenient base64
-  let bitArray = fromByteString bitRange byteString
-  let circuit = decodeCircuit . Circuit.toList $ bitArray
-  pure circuit
