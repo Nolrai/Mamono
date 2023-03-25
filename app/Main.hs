@@ -155,10 +155,9 @@ printStats generationNumber population = do
 handleResult :: FilePath -> [(Circuit, Double)] -> IO ()
 handleResult "" result = do
   putStrLn "Ending fitnesses: "
-  print (snd <$> result)
+  print (sort (snd <$> result))
 handleResult output result = do
-  putStrLn "Ending fitnesses: "
-  print (snd <$> result)
+  handleResult "" result
   let bs = serialize $ List.map fst result
   Text.writeFile output bs
   putStrLn "Wrote result to file."
