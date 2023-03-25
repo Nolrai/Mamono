@@ -26,7 +26,7 @@ import Relude.Base (Show)
 roundTrip :: (Show a, Eq a, Serialize a) => a -> Expectation
 roundTrip c = do
   let serialized = serialize c
-  deserialized <- deserialize serialized
+  deserialized <- deserialize "" "test" serialized
   deserialized `shouldBe` c
 
 spec :: Spec
