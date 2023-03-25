@@ -112,6 +112,36 @@ executable Mamono
     -- Base language which the package is written in.
     default-language: Haskell2010
 
+executable Mamono-profiling
+    main-is:
+      main.hs
+    ghc-options:
+      -O2
+      -threaded
+      -fprof-auto
+      "-with-rtsopts=-N -p -s -h -i0.1"
+      -prof
+    build-depends:
+      base >= 4.14 && < 5
+    -- Directories containing source files.
+    hs-source-dirs:   app
+        -- Other library packages from which modules are imported.
+    build-depends:
+        base >=4.14 && <5,
+        Mamono,
+        bytestring,
+        optparse-applicative,
+        vector,
+        moo,
+        bitwise,
+        text,
+        QuickCheck,
+        relude,
+    other-modules:    Options
+
+    -- Base language which the package is written in.
+    default-language: Haskell2010
+
 test-suite Mamono-test
     -- Base language which the package is written in.
     default-language: Haskell2010

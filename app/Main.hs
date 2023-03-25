@@ -78,6 +78,7 @@ import Relude hiding (fromList)
 import Serialization (Serialize (..), deserialize, TextParser)
 import Test.QuickCheck (Gen, arbitrary, chooseInt, generate, vectorOf)
 import Utils (scoreLines)
+import Moo.GeneticAlgorithm.Binary (Cond(..))
 
 main :: IO ()
 main = do
@@ -134,8 +135,15 @@ body plainText population' timeLimit = do
     selectionOp :: SelectionOp a
     selectionOp = withPopulationTransform (rankScale Minimizing) (rouletteSelect 2)
     cond :: Cond a
-    cond = Generations 10000
+    cond = GensNoChange 5 (quantiles [0.5, 0.0]) Nothing `And` IfObjective medianEqualsMin
     population = encodeCircuit <$> population'
+
+-- if the median and minimum are the same, we're done
+medianEqualsMin :: [Objective] -> Bool
+medianEqualsMin scores =
+  case quantiles [0.5, 0] scores of
+    [median, min] -> median == min
+    _ -> False
 
 -- choose n lines from the input file and score the circuit against them
 makeProctor :: Int -> Vector ByteString -> IO ([Genome Bool] -> [Objective])
