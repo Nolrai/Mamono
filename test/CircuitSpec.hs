@@ -22,6 +22,7 @@ import GHC.Num ((-))
 import Test.Hspec
 import Test.QuickCheck hiding ((.&.))
 import qualified Test.QuickCheck as QC
+import Relude (show)
 
 class TestForAll a where
   testForAll :: a -> Expectation 
@@ -48,38 +49,38 @@ spec = do
         let a' = fromWord8 a
         let b' = fromWord8 b
         a /= b --> 
-          (a' .^. b') `shouldNotBe` fromWord8 0
+          ((a', a' .^. b') `shouldNotBe` (a', fromWord8 0))
     it "should be false if a and b are the same" $ do
       testForAll $ \ (a :: Word8) -> do
         let a' = fromWord8 a
         let b' = a'
-        (a' .^. b') `shouldBe` fromWord8 0
+        (a', a' .^. b') `shouldBe` (a', fromWord8 0)
   describe "test" $ do
     it "should allways be true if a is false" $ do
       testForAll $ \ (b :: Word8) -> do
         let a' = false (0, 7)
         let b' = fromWord8 b
-        test a' b' `shouldBe` True
+        (a', b', test a' b') `shouldBe` (a', b', True)
     it "should be true if b is true" $ do
       testForAll $ \ (a :: Word8) -> do
         let a' = fromWord8 a
         let b' = true (0, 7)
-        test a' b' `shouldBe` True
+        (a', b', test a' b') `shouldBe` (a', b', True)
     it "If a == b then test a b == True" $ do
       testForAll $ \ (a :: Word8) -> do
         let a' = fromWord8 a
         let b' = a'
-        test a' b' `shouldBe` True
+        (a', b', test a' b') `shouldBe` (a', b', True)
     it "test a (a .|. b) == True" $ do
       testForAll $ \ (a :: Word8) (b :: Word8) -> do
         let a' = fromWord8 a
         let b' = a' .|. fromWord8 b
-        test a' b' `shouldBe` True
+        (a', b', test a' b') `shouldBe` (a', b', True)
     it "If b is the compliment of a, and a /= 0 then test a b == False" $ do
       testForAll $ \ (a :: Word8) -> do
         let a' = fromWord8 a
         let b' = BitArray.map not a'
-        a /= 0 --> test a' b' `shouldBe` False
+        a /= 0 --> (a', b', test a' b') `shouldBe` (a', b', False)
     it "If (a .&. c == false (0, 7)) then test a (b .^. c) == test a b" $ do
       QC.property $ \ (a :: Word8) (b :: Word8) -> 
         testForAll $ \ (c :: Word8) ->
@@ -88,35 +89,35 @@ spec = do
           let b' = fromWord8 b
           let c' = fromWord8 c
           a' .&. c' == false (0, 7) -->
-            test a' (b' .^. c') `shouldBe` test a' b'
+            (a', b', c', test a' (b' .^. c')) `shouldBe` (a', b', c', test a' b')
     it "setting bits in a cant make it true!" $ do
        QC.property $ \ (a :: Word8) (b :: Word8) -> 
         testForAll $ \ (c :: Word8) -> do
         let a' = fromWord8 a
         let b' = fromWord8 b
         let c' = fromWord8 c
-        not (test a' b') --> test (a' .|. c') b' `shouldBe` False
+        not (test a' b') --> (a', b', c', test (a' .|. c') b') `shouldBe` (a', b', c', False)
     it "clearing bits in b cant make it true!" $ do
       QC.property $ \ (a :: Word8) (b :: Word8) -> 
         testForAll $ \ (c :: Word8) -> do
         let a' = fromWord8 a
         let b' = fromWord8 b
         let c' = fromWord8 c
-        not (test a' b') --> test a' (b' .&. c') `shouldBe` False
+        not (test a' b') --> (a', b', c', test a' (b' .&. c')) `shouldBe` (a', b', c', False)
     it "clearing bits in a cant make it false!" $ do
       QC.property $ \ (a :: Word8) (b :: Word8) -> 
         testForAll $ \ (c :: Word8) -> do
         let a' = fromWord8 a
         let b' = fromWord8 b
         let c' = fromWord8 c
-        test a' b' --> test (a' .&. c') b' `shouldBe` True
+        test a' b' --> (a', b', c', test (a' .&. c') b') `shouldBe` (a', b', c', True)
     it "setting bits in b cant make it false!" $ do
       QC.property $ \ (a :: Word8) (b :: Word8) -> 
         testForAll $ \ (c :: Word8) -> do
         let a' = fromWord8 a
         let b' = fromWord8 b
         let c' = fromWord8 c
-        test a' b' --> test a' (b' .|. c') `shouldBe` True
+        test a' b' --> (a', b', c', test a' (b' .|. c')) `shouldBe` (a', b', c', True)
 
   describe "runCmd" $ do
     it "can toggle" $ do
@@ -126,15 +127,16 @@ spec = do
         let state = control
         let cmd = Cmd control target
         let expected = state .^. target
-        runCmd cmd state `shouldBe` expected
+        control .&. target == false (0, 7) -->
+          ((cmd, state, runCmd cmd state) `shouldBe` (cmd, state, expected))
     it "can not toggle" $ do
       testForAll $ \(c :: Word8) (t :: Word8) -> do
         let control = fromWord8 c
         let target = fromWord8 t
         let state = control .^. true (0, 7)
         let cmd = Cmd control target
-        let expected = state .^. target
-        c /= 0 --> runCmd cmd state `shouldBe` state
+        control .&. target == false (0, 7) && c /= 0 --> 
+          (cmd, state, runCmd cmd state) `shouldBe` (cmd, state, state)
     it "should never do anything else" $ do
       QC.property $ \(c :: Word8) (t :: Word8) -> 
         testForAll $ \ (s :: Word8) -> do
@@ -144,12 +146,13 @@ spec = do
         let cmd = Cmd control target
         let expected = state .^. target
         let actual = runCmd cmd state
-        actual /= state --> actual `shouldBe` expected
+        actual /= state --> (cmd, state, actual) `shouldBe` (cmd, state, expected)
     it "is the reverse of runCmd" $
       property $ \(cmd :: Cmd) ->  
         testForAll $ \ (state :: Word8) -> do
         let state' = fromWord8 state
-        runCmd cmd (runCmd cmd state') `shouldBe` state'
+        let actual = runCmd cmd (runCmd cmd state')
+        (cmd, state', actual) `shouldBe` (cmd, state', state')
   describe "runCircuit" $ do
     it "is runCmd on singletons" $
       property $ \(cmd :: Cmd) (state :: BitArray Word8) ->

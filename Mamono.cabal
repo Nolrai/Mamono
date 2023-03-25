@@ -73,7 +73,7 @@ library
                     , moo
                     , text
                     , megaparsec
-                    , base64-bytestring
+                    , formatting
 
     -- Directories containing source files.
     hs-source-dirs:   src

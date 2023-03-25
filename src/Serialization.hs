@@ -17,7 +17,6 @@ import Data.Array.BitArray.ByteString as BitArray
   ( fromByteString,
     toByteString,
   )
-import Data.ByteString.Base64 qualified as Base64
 import Data.List qualified as List
 import Data.Text qualified as Text
 import Relude hiding (many)
@@ -28,7 +27,8 @@ import Text.Megaparsec.Char.Lexer qualified as Lexer
 import Utils
 import Data.Text.Lazy.Builder.Int (hexadecimal)
 import qualified Data.Vector as Vector
-import Text.Printf (printf)
+import Formatting hiding (char)
+import qualified Data.Text.Lazy as LText
 
 class Serialize a where
   serialize :: a -> Text
@@ -36,7 +36,7 @@ class Serialize a where
 
 instance Serialize Cmd where
   serialize :: Cmd -> Text
-  serialize Cmd {..} = Text.pack $ printf "%2h %2h" (toWord8 control) (toWord8 target)
+  serialize Cmd {..} = LText.toStrict $ format (hex % stext % hex ) (toWord8 control) " " (toWord8 target)
   parser :: TextParser Cmd
   parser = do
     control :: BitArray Word8 <- fromWord8 <$> (Lexer.hexadecimal <* space1)

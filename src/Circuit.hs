@@ -3,6 +3,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Circuit where
 
@@ -21,11 +22,14 @@ import Debug.Trace
 import GHC.Base
 import GHC.Int
 import GHC.Num
-import GHC.Real
+import GHC.Real hiding ((%))
 import Moo.GeneticAlgorithm
 import Moo.GeneticAlgorithm.Binary
 import Test.QuickCheck hiding ((.&.))
 import Text.Show
+import Formatting
+import qualified Data.Text.Lazy as Text
+import qualified Data.Text.Lazy as Text.Lazy
 
 (.&.) :: BitArray Word8 -> BitArray Word8 -> BitArray Word8
 (.&.) = zipWith (&&)
@@ -50,7 +54,7 @@ fromWord8 :: Word8 -> BitArray Word8
 fromWord8 c = fromByteString (0, 7) (BS.singleton c)
 
 toWord8 :: BitArray Word8 -> Word8
-toWord8 bitArray = List.sum $ List.zipWith (\i b -> if b then 2 ^ i else 0) (reverse [0 .. 7] :: [Word8]) (elems bitArray)
+toWord8 bitArray = BS.head (toByteString bitArray)
 
 instance Eq (BitArray Word8) where
   (/=) :: BitArray Word8 -> BitArray Word8 -> Bool
@@ -70,7 +74,7 @@ data Cmd = Cmd {control :: BitArray Word8, target :: BitArray Word8}
   deriving (Show, Eq, Ord)
 
 instance Show (BitArray Word8) where
-  show b = "fromWord8 0b" <> fmap (\x -> if x then '1' else '0') (elems b)
+  show b = Text.Lazy.unpack $ format ("fromWord8 " % binPrefix 8) (toWord8 b)
 
 type Circuit = V.Vector Cmd
 
