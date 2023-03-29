@@ -52,6 +52,7 @@ library
     exposed-modules:  Circuit
                     , Utils
                     , Serialization
+                    , Counts
     -- Modules included in this library but not exported.
     -- other-modules:  
 
@@ -67,13 +68,18 @@ library
                     , vector
                     , relude
                     , gloss
-                    , bitwise
                     , MonadRandom
                     , QuickCheck
                     , moo
                     , text
                     , megaparsec
                     , formatting
+                    , parallel
+                    , conduit >= 1.3.4.2
+                    , pqueue
+                    , binary
+                    , vector-algorithms
+                    , bytestring >= 0.11.4.0
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -99,7 +105,6 @@ executable Mamono
         optparse-applicative,
         vector,
         moo,
-        bitwise,
         text,
         QuickCheck,
         relude,
@@ -133,10 +138,11 @@ executable Mamono-profiling
         optparse-applicative,
         vector,
         moo,
-        bitwise,
         text,
         QuickCheck,
         relude,
+        conduit,
+
     other-modules:    Options
 
     -- Base language which the package is written in.
@@ -158,6 +164,7 @@ test-suite Mamono-test
     other-modules:    CircuitSpec
                     , UtilsSpec
                     , SerializationSpec
+                    , CountsSpec
 
     -- Test dependencies.
     build-depends:    base >=4.14 && <5
@@ -168,4 +175,3 @@ test-suite Mamono-test
                     , lens
                     , vector
                     , gloss
-                    , bitwise

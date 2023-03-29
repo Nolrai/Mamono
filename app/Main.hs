@@ -12,8 +12,9 @@ import Circuit
   ( Circuit,
     decodeCircuit,
     encodeCircuit,
-    fromList,
-    toList, noop,
+    fromBools,
+    noop,
+    toBools,
   )
 import Control.Applicative
   ( Applicative (pure, (*>), (<*), (<*>)),
@@ -22,8 +23,6 @@ import Control.Applicative
 import Control.Monad ((=<<))
 import Control.Monad qualified as Monad
 import Control.Monad.ST (stToIO)
-import Data.Array.BitArray as BitArray
-import Data.Array.BitArray.ByteString (fromByteString, toByteString)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Char (Char, ord)
@@ -40,11 +39,12 @@ import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import GHC.Stats (RTSStats (nonmoving_gc_cpu_ns))
 import Moo.GeneticAlgorithm.Binary
-  ( Cond (Generations),
+  ( Cond (..),
     Genome,
     IOHook (DoEvery, TimeLimit),
     Objective,
     ObjectiveFunction (..),
+    Population,
     ProblemType (Minimizing),
     Rand,
     SelectionOp,
@@ -56,7 +56,7 @@ import Moo.GeneticAlgorithm.Binary
     rankScale,
     rouletteSelect,
     runIO,
-    withPopulationTransform, Population,
+    withPopulationTransform,
   )
 import Moo.GeneticAlgorithm.Run
   ( Cond (Generations),
@@ -75,18 +75,36 @@ import Moo.GeneticAlgorithm.Types
   )
 import Options (Options (..), getOptions)
 import Relude hiding (fromList)
-import Serialization (Serialize (..), deserialize, TextParser)
+import Serialization (Serialize (..), TextParser, deserialize)
 import Test.QuickCheck (Gen, arbitrary, chooseInt, generate, vectorOf)
 import Utils (scoreLines)
-import Moo.GeneticAlgorithm.Binary (Cond(..))
+import Counts
+import Data.Vector.Mutable qualified as MV
 
 main :: IO ()
 main = do
   Text.putStrLn "Welcome to the Circuit Optimizer!"
   print =<< getArgs
-  (population, timeLimit, output, plainText) <- getInput
-  result <- body (toChunks 100 plainText) population timeLimit
-  handleResult output result
+  input <- getInput
+  case input of
+    Left (population, timeLimit, output, plainText) -> do
+      result <- body (toChunks 100 plainText) population timeLimit
+      handleResult output result
+    Right (plainText, inputFile, outputFile) -> do
+      c <- countFile plainText
+      print c
+      putTextLn $ "Entropy: " <> showT (entropy c)
+      let Just tree = huffmanTree c
+      putTextLn $ "huffman tree: " <> showT tree
+      let e = makeEncoderFromTree tree
+      putTextLn "huffman code (DF): " 
+      putText $ showEncoderDF e
+      putTextLn "huffman code (BF): " 
+      putText $ showEncoderBF e
+      putTextLn "Starting to encode file"
+
+
+
 
 toChunks :: Int -> ByteString -> Vector ByteString
 toChunks n = Vector.unfoldr step
@@ -95,20 +113,23 @@ toChunks n = Vector.unfoldr step
       | BS.null bs = Nothing
       | otherwise = Just (BS.splitAt n bs)
 
-getInput :: IO ([Circuit], Int, FilePath, ByteString)
+getInput :: IO (Either ([Circuit], Int, FilePath, ByteString) (FilePath, FilePath, FilePath))
 getInput = do
   print =<< getOptions
   Options {..} <- getOptions
-  plainText <- BS.readFile plainText
-  case (startPopulation == 0, input == "") of
-    (True, True) -> die "No input file or population size given. Exiting."
-    (False, False) -> die "Both input file and population size given. Exiting."
-    (True, False) -> do
-      population <- readPopulationFile input
-      pure (population, timeLimit, output, plainText)
-    (False, True) -> do
-      population <- generatePopulation startPopulation
-      pure (population, timeLimit, output, plainText)
+  if makeCounter
+    then pure $ Right (plainText, input, output)
+    else do
+      plainText <- BS.readFile plainText
+      Left <$> case (startPopulation == 0, input == "") of
+        (True, True) -> die "No input file or population size given. Exiting."
+        (False, False) -> die "Both input file and population size given. Exiting."
+        (True, False) -> do
+          population <- readPopulationFile input
+          pure (population, timeLimit, output, plainText)
+        (False, True) -> do
+          population <- generatePopulation startPopulation
+          pure (population, timeLimit, output, plainText)
 
 readPopulationFile :: FilePath -> IO [Circuit]
 readPopulationFile filePath = do
@@ -135,13 +156,13 @@ body plainText population' timeLimit = do
     selectionOp :: SelectionOp a
     selectionOp = withPopulationTransform (rankScale Minimizing) (rouletteSelect 2)
     cond :: Cond a
-    cond = GensNoChange 5 (quantiles [0.5, 0.0]) Nothing `And` IfObjective medianEqualsMin
+    cond = GensNoChange 5 (`quantiles` [0.5, 0.0]) Nothing `And` IfObjective medianEqualsMin
     population = encodeCircuit <$> population'
 
 -- if the median and minimum are the same, we're done
 medianEqualsMin :: [Objective] -> Bool
 medianEqualsMin scores =
-  case quantiles [0.5, 0] scores of
+  case quantiles scores [0.5, 0] of
     [median, min] -> median == min
     _ -> False
 

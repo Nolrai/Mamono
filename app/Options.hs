@@ -50,18 +50,27 @@ startPopulationParser =
         <> help "Starting population size"
         <> value 0
     )
+  
+makeCounterParser :: Parser Bool
+makeCounterParser =
+  switch
+    ( long "make-counter"
+        <> short 'c'
+        <> help "Make a counter"
+    )
 
 data Options = Options
   { output :: FilePath,
     input :: FilePath,
     plainText :: FilePath,
     timeLimit :: Int,
-    startPopulation :: Int
+    startPopulation :: Int,
+    makeCounter :: Bool 
   }
   deriving (Show)
 
 optionParser :: Parser Options
-optionParser = Options <$> outputParser <*> inputParser <*> plainTextParser <*> timeLimitParser <*> startPopulationParser
+optionParser = Options <$> outputParser <*> inputParser <*> plainTextParser <*> timeLimitParser <*> startPopulationParser <*> makeCounterParser
 
 getOptions :: IO Options
 getOptions = execParser opts

@@ -18,22 +18,28 @@ import GHC.Enum
 import GHC.Num (Num (..))
 import GHC.Real (fromIntegral)
 import Moo.GeneticAlgorithm
-import Relude (Show, show, (/))
+import Relude (Show, show, (/), Floating (logBase))
 import System.IO (FilePath, IOMode (ReadMode), openFile)
+import GHC.Float (Floating(log1p, log))
 
 -- score a circuit against a set of lines
 scoreLines :: Vector ByteString -> Circuit -> Double
-scoreLines lines circuit = fromIntegral (List.sum $ (`scoreLine` circuit) <$> lines) / fromIntegral (Vector.sum $ ByteString.length <$> lines)
+scoreLines lines circuit = List.sum ((`scoreLine` circuit) <$> lines) / fromIntegral (Vector.sum $ ByteString.length <$> lines)
 
 -- | Score a circuit against a single line
-scoreLine :: ByteString -> Circuit -> Int
+scoreLine :: ByteString -> Circuit -> Double
 scoreLine line circuit =
   ByteString.foldl (\acc c -> acc + scoreWord8 c circuit) 0 line
 
+-- | Score an encoder against a single line
+scoreEncoder :: ByteString -> Vector Word8 -> Double
+scoreEncoder line v =
+  ByteString.foldl (\acc c -> acc + (log1p (fromIntegral (v ! fromIntegral c)) / log 2)) 0 line
+
 -- | Score a circuit against a single word8
-scoreWord8 :: Word8 -> Circuit -> Int
+scoreWord8 :: Word8 -> Circuit -> Double
 scoreWord8 w circuit =
-  fromIntegral . toWord8 . runCircuit circuit $ fromWord8 w
+  (/ log 2) . log1p . fromIntegral . runCircuit circuit $ w -- log1p the set {0..n} takes log(n+1) bits
 
 showToBS :: Show a => a -> ByteString
 showToBS = Text.encodeUtf8 . show

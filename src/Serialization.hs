@@ -3,32 +3,27 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module Serialization where
 
-import Relude.Applicative ((*>), (<*), (<*>), (<|>))
 import Circuit
 import Control.Monad qualified as Monad
-import Data.Array.BitArray as BitArray
-import Data.Array.BitArray.ByteString as BitArray
-  ( fromByteString,
-    toByteString,
-  )
 import Data.List qualified as List
 import Data.Text qualified as Text
+import Data.Text.Lazy qualified as LText
+import Data.Text.Lazy.Builder.Int (hexadecimal)
+import Data.Vector qualified as Vector
+import Formatting hiding (char)
 import Relude hiding (many)
-import Text.Megaparsec (MonadParsec (takeP), Parsec, errorBundlePretty, parse, runParser, oneOf, takeWhile1P, sepEndBy1)
-import Text.Megaparsec.Char (char, space, newline, space1)
+import Relude.Applicative ((*>), (<*), (<*>), (<|>))
+import Text.Megaparsec (MonadParsec (takeP), Parsec, errorBundlePretty, oneOf, parse, runParser, sepEndBy1, takeWhile1P)
+import Text.Megaparsec.Char (char, newline, space, space1)
 import Text.Megaparsec.Char qualified
 import Text.Megaparsec.Char.Lexer qualified as Lexer
 import Utils
-import Data.Text.Lazy.Builder.Int (hexadecimal)
-import qualified Data.Vector as Vector
-import Formatting hiding (char)
-import qualified Data.Text.Lazy as LText
 
 class Serialize a where
   serialize :: a -> Text
@@ -36,11 +31,11 @@ class Serialize a where
 
 instance Serialize Cmd where
   serialize :: Cmd -> Text
-  serialize Cmd {..} = LText.toStrict $ format (hex % stext % hex ) (toWord8 control) " " (toWord8 target)
+  serialize Cmd {..} = LText.toStrict $ format (hex % stext % hex) control " " target
   parser :: TextParser Cmd
   parser = do
-    control :: BitArray Word8 <- fromWord8 <$> (Lexer.hexadecimal <* space1)
-    target :: BitArray Word8 <- fromWord8 <$> Lexer.hexadecimal
+    control :: Word8 <- Lexer.hexadecimal <* space1
+    target :: Word8 <- Lexer.hexadecimal
     pure Cmd {..}
 
 instance Serialize Circuit where
