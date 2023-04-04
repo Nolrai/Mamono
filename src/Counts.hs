@@ -11,7 +11,7 @@ import Data.Vector.Mutable as MV
 import Data.Vector.Algorithms.Intro as MV
 import Data.ByteString as ByteString
 import Data.ByteString.Lazy qualified as Lazy
-import Relude
+import Relude hiding (Dual)
 import qualified Data.List as List
 import Control.Parallel
 import Data.Conduit as C
@@ -22,6 +22,8 @@ import Data.Binary.Builder
 import Data.Text as Text
 import Control.Monad.ST as ST
 import Text.Printf
+import DualNumbers
+import qualified Conduit as C
 
 -- | given a sample of text, return a vector of counts
 counts :: ByteString -> Vector Int
@@ -41,45 +43,53 @@ entropy counts = Vector.sum $ Vector.map (\c -> let p = fromIntegral c / total i
   where
     total = fromIntegral $ Vector.sum counts
 
-data BinaryTree a = Leaf a | Node (BinaryTree a) (BinaryTree a) deriving (Show)
+data BinaryTree a = Leaf a | Node (BinaryTree a) (BinaryTree a) deriving (Show, Eq, Ord, Read)
 
-huffmanTree :: Vector Int -> Maybe (BinaryTree Word8)
-huffmanTree c = go $ PQ.fromList $ Vector.toList $ Vector.imap (\i x -> (x + 1, Leaf (fromIntegral i))) c
+huffmanTreeFromCounts :: Vector Int -> BinaryTree Word8
+huffmanTreeFromCounts c = go $ PQ.fromList $ Vector.toList $ Vector.imap (\i x -> (addEpsilon x, Leaf (fromIntegral i))) c
   where
     go pq
-      | PQ.size pq == 1 = Just $ snd $ PQ.findMin pq
+      | PQ.size pq == 1 = snd $ PQ.findMin pq
       | otherwise = case (PQ.findMin pq, PQ.findMin $ PQ.deleteMin pq) of
         ((c1, t1), (c2, t2)) -> go $ PQ.insert (c1 + c2) (Node t1 t2) $ PQ.deleteMin $ PQ.deleteMin pq
 
-huffmanTreeFromText :: ByteString -> Maybe (BinaryTree Word8)
-huffmanTreeFromText = huffmanTree . counts
+huffmanTree :: ByteString -> BinaryTree Word8
+huffmanTree = huffmanTreeFromCounts . counts
 
 -- | given a huffman tree, return a vector of encodings
-makeEncoderFromTree :: BinaryTree Word8 -> Vector (Vector Bool)
-makeEncoderFromTree tree = Vector.generate 255 (\ i -> maybe (error ("leaf " <> show i <> " not found!")) Vector.fromList . flip go tree . fromIntegral $ i)
+makeEncoderFromTree :: MonadFail m => BinaryTree Word8 -> Vector (m (Vector Bool))
+makeEncoderFromTree tree = Vector.generate 255 (\ i -> handleResult i . flip go tree . fromIntegral $ i)
   where
-    go :: Word8 -> BinaryTree Word8 -> Maybe [Bool]
-    go w (Leaf w') = if w == w' then Just [] else Nothing
+    go :: Word8 -> BinaryTree Word8 -> [ [Bool] ]
+    go w (Leaf w') = if w == w' then pure [] else []
     go w (Node l r) = (True :) <$> go w l <|> (False :) <$> go w r
+    handleResult i [] = fail $ "makeEncoderFromTree: no encoding for " <> show i
+    handleResult _ [x] = pure (Vector.fromList x)
+    handleResult i xs = fail $ "makeEncoderFromTree: multiple encodings for " <> show i <> ": " <> show xs
 
 -- | encode a file using a vector of encodings
-encode :: Vector (Vector Bool) -> FilePath -> FilePath -> IO ()
-encode encoder input output =
-  runConduitRes $ sourceFile input .| C.concatMapE  ((encoder !) . fromIntegral) .| C.concat .| collectBits .| builderToByteString .| sinkFile output
+encode :: (Int -> IO ()) -> Vector (Vector Bool) -> FilePath -> FilePath -> IO ()
+encode onProgress encoder input output =
+  runConduitRes $ sourceFile input .| reportProgress onProgress .| C.concatMapCE  ((encoder !) . fromIntegral) .| C.concat .| collectBits .| builderToByteString .| sinkFile output
+
+reportProgress :: MonadIO m => (Int -> IO ()) -> ConduitT ByteString ByteString m ()
+reportProgress onProgress = iterM (liftIO . onProgress . ByteString.length)
 
 collectBits :: (PrimMonad m, Monad m) => ConduitT Bool Builder m ()
-collectBits = conduitVector 8 .| C.map (Data.Binary.Builder.singleton . bitsToByte)
+collectBits = conduitVector 8 .| C.map vectorToByte .| C.map Data.Binary.Builder.singleton
   where
-  bitsToByte :: Vector Bool -> Word8
-  bitsToByte = Vector.ifoldl' (\acc i b -> if b then setBit acc i else acc) 0
+    vectorToByte :: Vector Bool -> Word8
+    vectorToByte = Vector.ifoldl' (\acc i b -> if b then setBit acc i else acc) 0
 
 -- | decode a file using a huffman tree
-decode :: BinaryTree Word8 -> FilePath -> FilePath -> IO ()
-decode tree input output =
-  runConduitRes $ sourceFile input .| bytesToBits .| decodeTree tree .| builderToByteString .| sinkFile output
+decode:: (Int -> IO ()) -> BinaryTree Word8 -> FilePath -> FilePath -> IO ()
+decode onProgress tree input output =
+  runConduitRes $ sourceFile input .| reportProgress onProgress .| bytesToBits .| decodeTree tree .| builderToByteString .| sinkFile output
+
+bytesToBits :: MonadFail m => ConduitT ByteString Bool m ()
+bytesToBits = C.concatMapCE byteToBits .| C.concat
   where
-  bytesToBits :: Monad m => ConduitT ByteString Bool m ()
-  bytesToBits = C.concatMapE (\ byte -> testBit byte <$> Vector.enumFromN 0 8) .| C.concat
+  byteToBits byte = testBit byte <$> Vector.enumFromN 0 8
 
 decodeTree :: Monad m => BinaryTree Word8 -> ConduitT Bool Builder m ()
 decodeTree tree = go tree

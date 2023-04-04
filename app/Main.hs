@@ -80,9 +80,14 @@ import Test.QuickCheck (Gen, arbitrary, chooseInt, generate, vectorOf)
 import Utils (scoreLines)
 import Counts
 import Data.Vector.Mutable qualified as MV
+import System.Console.Regions
+import System.Directory (getFileSize)
+import System.Console.AsciiProgress as Progress
+import Data.Semigroup ((<>))
+import Shellmet (($|))
 
 main :: IO ()
-main = do
+main = displayConsoleRegions $ do
   Text.putStrLn "Welcome to the Circuit Optimizer!"
   print =<< getArgs
   input <- getInput
@@ -94,17 +99,40 @@ main = do
       c <- countFile plainText
       print c
       putTextLn $ "Entropy: " <> showT (entropy c)
-      let Just tree = huffmanTree c
+      let tree = huffmanTreeFromCounts c
       putTextLn $ "huffman tree: " <> showT tree
-      let e = makeEncoderFromTree tree
-      putTextLn "huffman code (DF): " 
+      let Just e = sequenceA $ makeEncoderFromTree tree
+      putTextLn "huffman code (DF): "
       putText $ showEncoderDF e
-      putTextLn "huffman code (BF): " 
+      putTextLn "huffman code (BF): "
       putText $ showEncoderBF e
       putTextLn "Starting to encode file"
+      inputSize <- getFileSize inputFile
+      encodingBar <- newProgressBar (encodingBarOptions inputSize) 
+      encode (tickN encodingBar) e inputFile outputFile >> complete encodingBar
+      outputSize <- getFileSize outputFile
+      putTextLn $ showT inputSize <> " bytes encoded to " <> showT outputSize <> " bytes"
+      putTextLn "Starting to decode file"
+      decodingBar <- newProgressBar (decodingBarOptions outputSize)
+      decode (tickN decodingBar) tree outputFile (inputFile <> ".decoded") >> complete decodingBar
+      "diff" $| ["--speed-large-files", "-a", "--color", Text.pack inputFile, Text.pack inputFile <> ".decoded"]
+      putTextLn "Done"
 
+encodingBarOptions :: Integer -> Progress.Options
+encodingBarOptions inputSize = def
+  { pgTotal = fromIntegral inputSize
+  , pgWidth = 80
+  , pgOnCompletion = Just "Encoding complete, took :elapsed seconds."
+  , pgFormat = "Encoding: :percent [:current/:total] :bar :eta seconds (:elapsed seconds)"
+  }
 
-
+decodingBarOptions :: Integer -> Progress.Options
+decodingBarOptions inputSize = def
+  { pgTotal = fromIntegral inputSize
+  , pgWidth = 80
+  , pgOnCompletion = Just "decoding complete, took :elapsed seconds."
+  , pgFormat = "Decoded: :percent [:current/:total] :bar :eta seconds (:elapsed seconds)"
+  }
 
 toChunks :: Int -> ByteString -> Vector ByteString
 toChunks n = Vector.unfoldr step
@@ -116,7 +144,7 @@ toChunks n = Vector.unfoldr step
 getInput :: IO (Either ([Circuit], Int, FilePath, ByteString) (FilePath, FilePath, FilePath))
 getInput = do
   print =<< getOptions
-  Options {..} <- getOptions
+  Options.Options {..} <- getOptions
   if makeCounter
     then pure $ Right (plainText, input, output)
     else do

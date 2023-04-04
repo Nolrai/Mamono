@@ -53,6 +53,7 @@ library
                     , Utils
                     , Serialization
                     , Counts
+                    , DualNumbers
     -- Modules included in this library but not exported.
     -- other-modules:  
 
@@ -108,6 +109,10 @@ executable Mamono
         text,
         QuickCheck,
         relude,
+        concurrent-output,
+        ascii-progress,
+        directory,
+        shellmet,
 
     -- Directories containing source files.
     hs-source-dirs:   app
@@ -142,6 +147,10 @@ executable Mamono-profiling
         QuickCheck,
         relude,
         conduit,
+        concurrent-output,
+        ascii-progress,
+        directory,
+        shellmet,
 
     other-modules:    Options
 
